@@ -20,9 +20,9 @@ class DbCleanUp
     protected $essentialDsnMap = [
         'SS_DATABASE_CLASS'=>null,
         'SS_DATABASE_SERVER'=>'host',
-        'SS_DATABASE_SERVER'=>'port',
+        'SS_DATABASE_PORT'=>'port',
         'SS_DATABASE_NAME'=>'dbname',
-        'SS_DATBASE_USERNAME'=>'user',
+        'SS_DATABASE_USERNAME'=>'user',
         'SS_DATABASE_PASSWORD'=>'password'
 
     ];
@@ -32,6 +32,10 @@ class DbCleanUp
     ];
     /** @var string|null $this->dbname */
     protected $dbname = null;
+    /** @var bool $this->output */
+    protected $outputEnabled = false;
+    /** @var array $this->report */
+    protected $report = [];
 
 
     /**
@@ -40,10 +44,8 @@ class DbCleanUp
     public function __construct()
     {
         $details = array_replace($this->defaultDsnDetails, $this->getDatabaseDetails());
-        $essentials = array_flip($this->essentialDsnMap);
-        unset($essentials[null]);
 
-        if (count($details) == count($essentials)) {
+        if (count($details) == count($this->getEssentialDetails())) {
             $this->dbname = $details['dbname'];
             $dsn = 'mysql:host='.$details['host'].';port='.$details['port'].';dbname='.$details['dbname'];
             $this->pdo = new PDO($dsn, $details['user'], $details['password']);
@@ -53,16 +55,92 @@ class DbCleanUp
     }
 
     /**
+     * @return array $essentialDetails
+     */
+    protected function getEssentialDetails()
+    {
+        $essentialDetails = [];
+
+        foreach ($this->essentialDsnMap as $detail) {
+            if (is_int($detail) || is_string($detail)) {
+                $essentialDetails[] = $detail;
+            }
+        }
+
+        return $essentialDetails;
+    }
+
+    /**
+     * @return void
+     */
+    public function disableOutput()
+    {
+        $this->outputEnabled = false;
+    }
+
+    /**
+     * @return void
+     */
+    public function enableOutput()
+    {
+        $this->outputEnabled = true;
+    }
+
+    /**
+     * @param string $html
+     * @param bool|null $success
+     * @return void
+     */
+    protected function output($text, $paragraph = true, $success = null)
+    {
+        if ($this->outputEnabled) {
+            if ($paragraph) {
+                $tag = 'p';
+                $prefix = '';
+            }else {
+                $tag = 'span';
+                $prefix = '<br />';
+            }
+
+            if (is_null($success)) {
+                $style = '';
+            }elseif ($success) {
+                $style = ' style="color:green;"';
+            }else {
+                $style = ' style="color:red;"';
+            }
+
+            $this->report[] = '  <'.$tag.$style.'>'.htmlentities($text).'</'.$tag.'>'.$prefix;
+        }
+    }
+
+    /**
+     * @return void
+     */
+    public function outputReport()
+    {
+        foreach ($this->report as $html) {
+            print $html.PHP_EOL;
+        }
+    }
+
+    /**
      * @return bool $successful
      */
     public function removeVersionDuplicates($versionsToKeep = 1)
     {
+        $tablenames = $this->getTablenames();
+        $this->output('Accessed database successfully and found '.count($tablenames).' tables.');
+
         $versionTables = [];
         foreach ($this->getTablenames() as $tablename) {
             if (substr($tablename, -9) == '_versions') {
                 $versionTables[$tablename] = '`'.$this->dbname.'`.`'.$tablename.'`';
             }
         }
+        unset($tablenames);
+
+        $this->output('Filtered out '.count($versionTables).' version tables to clean up.');
 
         $allSuccessful = true;
         $selectQuery = 'SELECT RecordID, count(ID) FROM :tablename GROUP BY RecordID;';
@@ -86,9 +164,19 @@ class DbCleanUp
                 }
             }
 
-            if (!empty($tableQuery)) {
+            if (empty($tableQuery)) {
+                unset($successful);
+            }else {
                 $successful = $this->pdo->exec($tableQuery);
                 $allSuccessful &= $successful;
+            }
+
+            if (!isset($successful)) {
+                $this->output('Skipped '.$fullEscapedTablename.' ...', false);
+            }elseif ($successful) {
+                $this->output('Cleaned up '.$fullEscapedTablename.' ...', false, true);
+            }else {
+                $this->output('Clean up failed on '.$fullEscapedTablename.' ...', false, false);
             }
         }
 
@@ -131,11 +219,11 @@ class DbCleanUp
     protected function findEnvironmentCredentialsFilePath($filename)
     {
         $credentialsPath = null;
-        $searchDirectories = ['/vendor/', '/gs4-uniprotect/', '/src/'];
+        $searchDirectories = ['/vendor/', '/gs4-uniprotect/', '/src/', basename(__FILE__)];
 
         foreach ($searchDirectories as $directory) {
-            if ($path = strstr(__FILE__, '/vendor/', true)) {
-                if ($credentialsPath = realpath($path.'/'.$filename)) {
+            if ($path = strstr(__FILE__, $directory, true)) {
+                if ($credentialsPath = realpath($path.(empty($path) ? '' : '/').$filename)) {
                     break;
                 }
             }
@@ -160,9 +248,12 @@ class DbCleanUp
                 $details = [
                     'host'=>SS_DATABASE_SERVER,
                     'dbname'=>SS_DATABASE_NAME,
-                    'user'=>SS_DATBASE_USERNAME,
+                    'user'=>SS_DATABASE_USERNAME,
                     'password'=>SS_DATABASE_PASSWORD
                 ];
+                if (defined('SS_DATABASE_PORT')) {
+                    $details['port'] = SS_DATABASE_PORT;
+                }
             }
         }
 
@@ -188,7 +279,8 @@ class DbCleanUp
                         if (isset($envVariables[$envVariable])) {
                             $duplicates[] = $envVariable;
                         }else {
-                            $envVariables[$envVariable] = rtrim(ltrim(strstr(ltrim($row), '='), '='));
+                            $value = trim(ltrim(strstr(ltrim($row), '='), '='), " \n\r\0\"");
+                            $envVariables[$this->essentialDsnMap[$envVariable]] = $value;
                         }
                     }
                 }

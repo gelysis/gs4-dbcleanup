@@ -34,8 +34,8 @@ Planned: Use packagist dependency: `gelysis/gs4-dbcleanup`.
 Please contact the author.
 
 # RELEASE INFORMATION
-Gs4Dbcleanup 0.1-alpha
-2018-04-11
+Gs4Dbcleanup 0.2-beta
+2018-04-12
 
 # UPDATES
 Please see `CHANGELOG.md`.

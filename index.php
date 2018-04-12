@@ -10,4 +10,12 @@ require_once 'src/DbCleanUp.php';
 use Gs4Dbcleanup\DbCleanUp;
 
 $cleanUp = new DbCleanUp();
+$cleanUp->enableOutput();
 $cleanUp->removeVersionDuplicates();
+
+?>
+<html>
+<body>
+<?php $cleanUp->outputReport(); ?>
+</body>
+</html>
