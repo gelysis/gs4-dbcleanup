@@ -243,16 +243,14 @@ class DbCleanUp
         if (!empty($filePath)) {
             require_once $filePath;
 
-            if (defined('SS_DATABASE_CLASS') && defined('SS_DATABASE_SERVER') && defined('SS_DATABASE_NAME')
-              && defined('SS_DATABASE_USERNAME') && defined('SS_DATABASE_PASSWORD')) {
-                $details = [
-                    'host'=>SS_DATABASE_SERVER,
-                    'dbname'=>SS_DATABASE_NAME,
-                    'user'=>SS_DATABASE_USERNAME,
-                    'password'=>SS_DATABASE_PASSWORD
-                ];
-                if (defined('SS_DATABASE_PORT')) {
-                    $details['port'] = SS_DATABASE_PORT;
+            if (!empty($filePath)) {
+                require_once $filePath;
+
+                $details = [];
+                foreach ($this->essentialDsnMap as $contantname=>$key) {
+                    if (isset($key) && defined($contantname)) {
+                        $details[$key] = constant($contantname);
+                    }
                 }
             }
         }
